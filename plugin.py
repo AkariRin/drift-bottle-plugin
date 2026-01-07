@@ -124,6 +124,57 @@ class ThrowBottleCommand(BaseCommand):
     command_description = "扔一个漂流瓶到大海中"
     command_pattern = r'^扔漂流瓶.+$'
 
+    @staticmethod
+    def _make_request(url: str, payload: dict) -> Tuple[bool, Union[dict, str]]:
+        """发送HTTP POST请求到napcat"""
+        try:
+            data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+            request = Request(
+                url,
+                data=data,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            with urlopen(request, timeout=10) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return True, result
+        except HTTPError as e:
+            return False, f"HTTP错误: {e.code}"
+        except URLError as e:
+            return False, f"网络错误: {e.reason}"
+        except json.JSONDecodeError as e:
+            return False, f"JSON解析错误: {e}"
+        except Exception as e:
+            return False, f"请求错误: {str(e)}"
+
+    def get_stranger_info(self, address: str, port: int, user_id: str) -> Tuple[bool, Union[dict, str]]:
+        """获取用户信息（不需要在同一群组）"""
+        url = f"http://{address}:{port}/get_stranger_info"
+        payload = {"user_id": user_id}
+
+        success, result = self._make_request(url, payload)
+        if not success:
+            return False, result
+
+        data = result.get("data")
+        if data is None:
+            return False, "获取用户信息失败：返回数据为空"
+        return True, data
+
+    def get_group_info(self, address: str, port: int, group_id: str) -> Tuple[bool, Union[dict, str]]:
+        """获取群信息"""
+        url = f"http://{address}:{port}/get_group_info"
+        payload = {"group_id": group_id, "no_cache": False}
+
+        success, result = self._make_request(url, payload)
+        if not success:
+            return False, result
+
+        data = result.get("data")
+        if data is None:
+            return False, "获取群信息失败：返回数据为空"
+        return True, data
+
     async def execute(self) -> Tuple[bool, Optional[str], int]:
         # 获取消息内容
         message_text = self.message.processed_plain_text.strip()
@@ -153,6 +204,22 @@ class ThrowBottleCommand(BaseCommand):
 
         group_id = str(chat_stream.group_info.group_id)
 
+        # 获取napcat配置
+        napcat_address = self.get_config("napcat.address", "napcat")
+        napcat_port = self.get_config("napcat.port", 3000)
+
+        # 获取用户昵称
+        user_name = "未知"
+        success, stranger_info = self.get_stranger_info(napcat_address, napcat_port, user_id)
+        if success:
+            user_name = stranger_info.get("nickname") or stranger_info.get("nick", "未知")
+
+        # 获取群名称
+        group_name = "未知"
+        success, group_info = self.get_group_info(napcat_address, napcat_port, group_id)
+        if success:
+            group_name = group_info.get("group_name", "未知")
+
         # 初始化数据库
         current_dir = Path(__file__).parent.absolute()
         db_path = current_dir / "bottles.db"
@@ -161,7 +228,7 @@ class ThrowBottleCommand(BaseCommand):
         # 保存漂流瓶
         bottle_id = db.save_bottle(content, user_id, group_id)
 
-        logger.info(f"用户 {user_id} 在群 {group_id} 扔了一个漂流瓶(ID:{bottle_id}): {content[:50]}...")
+        logger.info(f"用户 {user_name}({user_id}) 在群 {group_name}({group_id}) 扔了一个漂流瓶(ID:{bottle_id}): {content[:20]}...")
 
         # 发送确认消息
         response = f"你将一个写着【{content}】的纸条塞入瓶中扔进大海，希望有人捞到吧~"
@@ -246,6 +313,22 @@ class PickBottleCommand(BaseCommand):
 
         group_id = str(chat_stream.group_info.group_id)
 
+        # 获取napcat配置
+        napcat_address = self.get_config("napcat.address", "napcat")
+        napcat_port = self.get_config("napcat.port", 3000)
+
+        # 获取当前用户昵称
+        current_user_name = "未知"
+        success, current_stranger_info = self.get_stranger_info(napcat_address, napcat_port, user_id)
+        if success:
+            current_user_name = current_stranger_info.get("nickname") or current_stranger_info.get("nick", "未知")
+
+        # 获取当前群名称
+        current_group_name = "未知"
+        success, current_group_info = self.get_group_info(napcat_address, napcat_port, group_id)
+        if success:
+            current_group_name = current_group_info.get("group_name", "未知")
+
         # 初始化数据库
         current_dir = Path(__file__).parent.absolute()
         db_path = current_dir / "bottles.db"
@@ -257,10 +340,6 @@ class PickBottleCommand(BaseCommand):
         if not bottle:
             await self.send_text("大海里暂时没有漂流瓶，试试自己扔一个吧~")
             return True, "没有可用漂流瓶", 1
-
-        # 获取napcat配置
-        napcat_address = self.get_config("napcat.address", "napcat")
-        napcat_port = self.get_config("napcat.port", 3000)
 
         # 获取发送者昵称
         sender_name = "未知"
@@ -277,7 +356,7 @@ class PickBottleCommand(BaseCommand):
         # 更新漂流瓶状态
         db.pick_bottle(bottle['id'], user_id, group_id)
 
-        logger.info(f"用户 {user_id} 在群 {group_id} 捡到了漂流瓶(ID:{bottle['id']})")
+        logger.info(f"用户 {current_user_name}({user_id}) 在群 {current_group_name}({group_id}) 捡到了漂流瓶(ID:{bottle['id']})")
 
         # 构建返回消息
         response = f"""你在海边捡到了一个漂流瓶，瓶中的纸条上写着：
