@@ -1,0 +1,19 @@
+{
+  "manifest_version": 1,
+  "name": "漂流瓶",
+  "version": "1.0.0",
+  "description": "",
+  "author": {
+    "name": "梦清",
+    "url": "https://github.com/AkariRin"
+  },
+  "license": "MIT",
+  "host_application": {
+    "min_version": "0.12.1"
+  },
+  "homepage_url": "https://github.com/AkariRin/drift-bottle-plugin",
+  "repository_url": "https://github.com/AkariRin/drift-bottle-plugin",
+  "keywords": ["漂流瓶"],
+  "categories": ["Entertainment & Interaction"],
+  "id": "AkariRin.drift-bottle"
+}
