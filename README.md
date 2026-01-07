@@ -16,6 +16,8 @@
 ### 捡漂流瓶
 群内发送 `捡漂流瓶` 从海中随机捡起一个漂流瓶
 
+> 💡 **自定义触发词**: 支持通过配置文件自定义命令触发的正则表达式，详见 [配置说明](#配置说明) 中的 `command` 配置段
+
 ## 配置napcat
 
 在napcat的网络配置中添加一个HTTP服务器：
@@ -38,11 +40,40 @@
 ```toml
 [plugin]
 enabled = true                 # 是否启用插件
-config_version = "1.0.0"       # 配置版本
+config_version = "1.1.0"       # 配置版本
 
 [napcat]
 address = "napcat"             # napcat服务器连接地址
 port = 3000                    # napcat服务器端口
+
+[command]
+# 扔漂流瓶命令的正则表达式，用于匹配触发命令的消息
+throw_regex = '^扔漂流瓶.+$'
+
+# 捡漂流瓶命令的正则表达式，用于匹配触发命令的消息
+pick_regex = '^捡漂流瓶$'
+```
+
+### 自定义触发词示例
+
+你可以通过修改 `command` 配置段来自定义触发词：
+
+**支持多个触发词：**
+```toml
+[command]
+throw_regex = '^(扔漂流瓶|丢瓶子|throw).+$'
+pick_regex = '^(捡漂流瓶|捞瓶子|pick)$'
+```
+
+这样设置后，以下命令都会生效：
+- 扔漂流瓶：`扔漂流瓶xxx`、`丢瓶子xxx`、`throwxxx`
+- 捡漂流瓶：`捡漂流瓶`、`捞瓶子`、`pick`
+
+**支持英文命令：**
+```toml
+[command]
+throw_regex = '^(扔漂流瓶|throw bottle).+$'
+pick_regex = '^(捡漂流瓶|pick bottle)$'
 ```
 
 ## 使用示例
@@ -78,3 +109,29 @@ Bot: 大海里暂时没有漂流瓶，试试自己扔一个吧~
 ## 数据存储
 
 插件数据存储在 `bottles.db` SQLite 数据库中
+
+## 技术说明
+
+### v1.1.0 重构更新
+
+- ✅ **NapcatAPI 类抽离**：将 Napcat API 请求方法抽离到独立的 `NapcatAPI` 类，消除代码重复，提升可维护性
+- ✅ **支持自定义正则表达式**：命令触发词可通过配置文件自定义，提供更大的灵活性
+- ✅ **统一代码风格**：参考 `jrlp-plugin` 的代码结构，保持插件间的一致性
+
+### 代码架构
+
+```
+plugin.py
+├── NapcatAPI           # Napcat API 调用类（静态方法）
+│   ├── _make_request()      # HTTP 请求基础方法
+│   ├── get_stranger_info()  # 获取用户信息
+│   └── get_group_info()     # 获取群信息
+├── BottleDatabase      # 数据库管理类
+│   ├── save_bottle()        # 保存漂流瓶
+│   ├── get_random_bottle()  # 随机获取漂流瓶
+│   └── pick_bottle()        # 标记漂流瓶已被捡起
+├── ThrowBottleCommand  # 扔漂流瓶命令
+└── PickBottleCommand   # 捡漂流瓶命令
+```
+
+

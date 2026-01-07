@@ -2,6 +2,7 @@ import sqlite3
 import random
 import time
 import json
+import toml
 from pathlib import Path
 from typing import Optional, Type, Tuple, List, Union
 from urllib.request import urlopen, Request
@@ -18,6 +19,131 @@ from src.plugin_system import (
 )
 
 logger = get_logger("drift-bottle-plugin")
+
+
+def _load_command_pattern(command_type: str) -> str:
+    """加载命令正则表达式配置
+
+    Args:
+        command_type: 命令类型，'throw' 表示扔漂流瓶，'pick' 表示捡漂流瓶
+
+    Returns:
+        str: 命令正则表达式，如果配置文件不存在或读取失败则返回默认值
+    """
+    # 配置映射：命令类型 -> (配置键名, 默认值, 日志描述)
+    config_map = {
+        'throw': ('throw_regex', r'^扔漂流瓶.+$', '扔漂流瓶'),
+        'pick': ('pick_regex', r'^捡漂流瓶$', '捡漂流瓶')
+    }
+
+    if command_type not in config_map:
+        raise ValueError(f"未知的命令类型: {command_type}")
+
+    config_key, default_pattern, log_desc = config_map[command_type]
+
+    try:
+        # 获取当前插件目录
+        plugin_dir = Path(__file__).parent
+        config_path = plugin_dir / "config.toml"
+
+        # 如果配置文件存在，尝试读取
+        if config_path.exists():
+            config = toml.load(config_path)
+            # 尝试从配置中获取正则表达式
+            if "command" in config and config_key in config["command"]:
+                pattern = config["command"][config_key]
+                logger.debug(f"从配置文件加载{log_desc}命令正则: {pattern}")
+                return pattern
+    except Exception as e:
+        logger.warning(f"加载{log_desc}命令正则配置失败，使用默认值: {e}")
+
+    # 返回默认值
+    return default_pattern
+
+
+# Napcat API调用类
+class NapcatAPI:
+    @staticmethod
+    def _make_request(url: str, payload: dict) -> Tuple[bool, Union[dict, str]]:
+        """发送HTTP POST请求到napcat
+
+        Args:
+            url: 请求URL
+            payload: 请求数据
+
+        Returns:
+            (True, response_data) 成功时
+            (False, error_message) 失败时
+        """
+        try:
+            data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+            request = Request(
+                url,
+                data=data,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            with urlopen(request, timeout=10) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return True, result
+        except HTTPError as e:
+            return False, f"HTTP错误: {e.code}"
+        except URLError as e:
+            return False, f"网络错误: {e.reason}"
+        except json.JSONDecodeError as e:
+            return False, f"JSON解析错误: {e}"
+        except Exception as e:
+            return False, f"请求错误: {str(e)}"
+
+    @staticmethod
+    def get_stranger_info(address: str, port: int, user_id: str) -> Tuple[bool, Union[dict, str]]:
+        """获取陌生人信息
+
+        Args:
+            address: napcat服务器地址
+            port: napcat服务器端口
+            user_id: 用户QQ号
+
+        Returns:
+            (True, stranger_info) 成功时返回用户信息字典
+            (False, error_msg) 失败时返回错误信息
+        """
+        url = f"http://{address}:{port}/get_stranger_info"
+        payload = {"user_id": user_id}
+
+        success, result = NapcatAPI._make_request(url, payload)
+        if not success:
+            return False, result
+
+        data = result.get("data")
+        if data is None:
+            return False, "获取用户信息失败：返回数据为空"
+        return True, data
+
+    @staticmethod
+    def get_group_info(address: str, port: int, group_id: str) -> Tuple[bool, Union[dict, str]]:
+        """获取群信息
+
+        Args:
+            address: napcat服务器地址
+            port: napcat服务器端口
+            group_id: 群号
+
+        Returns:
+            (True, group_info) 成功时返回群信息字典
+            (False, error_msg) 失败时返回错误信息
+        """
+        url = f"http://{address}:{port}/get_group_info"
+        payload = {"group_id": group_id, "no_cache": False}
+
+        success, result = NapcatAPI._make_request(url, payload)
+        if not success:
+            return False, result
+
+        data = result.get("data")
+        if data is None:
+            return False, "获取群信息失败：返回数据为空"
+        return True, data
 
 
 class BottleDatabase:
@@ -122,58 +248,7 @@ class ThrowBottleCommand(BaseCommand):
     """扔漂流瓶命令"""
     command_name = "throw-bottle"
     command_description = "扔一个漂流瓶到大海中"
-    command_pattern = r'^扔漂流瓶.+$'
-
-    @staticmethod
-    def _make_request(url: str, payload: dict) -> Tuple[bool, Union[dict, str]]:
-        """发送HTTP POST请求到napcat"""
-        try:
-            data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
-            request = Request(
-                url,
-                data=data,
-                headers={'Content-Type': 'application/json'},
-                method='POST'
-            )
-            with urlopen(request, timeout=10) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                return True, result
-        except HTTPError as e:
-            return False, f"HTTP错误: {e.code}"
-        except URLError as e:
-            return False, f"网络错误: {e.reason}"
-        except json.JSONDecodeError as e:
-            return False, f"JSON解析错误: {e}"
-        except Exception as e:
-            return False, f"请求错误: {str(e)}"
-
-    def get_stranger_info(self, address: str, port: int, user_id: str) -> Tuple[bool, Union[dict, str]]:
-        """获取用户信息（不需要在同一群组）"""
-        url = f"http://{address}:{port}/get_stranger_info"
-        payload = {"user_id": user_id}
-
-        success, result = self._make_request(url, payload)
-        if not success:
-            return False, result
-
-        data = result.get("data")
-        if data is None:
-            return False, "获取用户信息失败：返回数据为空"
-        return True, data
-
-    def get_group_info(self, address: str, port: int, group_id: str) -> Tuple[bool, Union[dict, str]]:
-        """获取群信息"""
-        url = f"http://{address}:{port}/get_group_info"
-        payload = {"group_id": group_id, "no_cache": False}
-
-        success, result = self._make_request(url, payload)
-        if not success:
-            return False, result
-
-        data = result.get("data")
-        if data is None:
-            return False, "获取群信息失败：返回数据为空"
-        return True, data
+    command_pattern = _load_command_pattern('throw')  # 在类定义时动态加载配置
 
     async def execute(self) -> Tuple[bool, Optional[str], int]:
         # 获取消息内容
@@ -210,13 +285,13 @@ class ThrowBottleCommand(BaseCommand):
 
         # 获取用户昵称
         user_name = "未知"
-        success, stranger_info = self.get_stranger_info(napcat_address, napcat_port, user_id)
+        success, stranger_info = NapcatAPI.get_stranger_info(napcat_address, napcat_port, user_id)
         if success:
             user_name = stranger_info.get("nickname") or stranger_info.get("nick", "未知")
 
         # 获取群名称
         group_name = "未知"
-        success, group_info = self.get_group_info(napcat_address, napcat_port, group_id)
+        success, group_info = NapcatAPI.get_group_info(napcat_address, napcat_port, group_id)
         if success:
             group_name = group_info.get("group_name", "未知")
 
@@ -241,58 +316,7 @@ class PickBottleCommand(BaseCommand):
     """捡漂流瓶命令"""
     command_name = "pick-bottle"
     command_description = "从大海中捡一个漂流瓶"
-    command_pattern = r'^捡漂流瓶$'
-
-    @staticmethod
-    def _make_request(url: str, payload: dict) -> Tuple[bool, Union[dict, str]]:
-        """发送HTTP POST请求到napcat"""
-        try:
-            data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
-            request = Request(
-                url,
-                data=data,
-                headers={'Content-Type': 'application/json'},
-                method='POST'
-            )
-            with urlopen(request, timeout=10) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                return True, result
-        except HTTPError as e:
-            return False, f"HTTP错误: {e.code}"
-        except URLError as e:
-            return False, f"网络错误: {e.reason}"
-        except json.JSONDecodeError as e:
-            return False, f"JSON解析错误: {e}"
-        except Exception as e:
-            return False, f"请求错误: {str(e)}"
-
-    def get_stranger_info(self, address: str, port: int, user_id: str) -> Tuple[bool, Union[dict, str]]:
-        """获取用户信息（不需要在同一群组）"""
-        url = f"http://{address}:{port}/get_stranger_info"
-        payload = {"user_id": user_id}
-
-        success, result = self._make_request(url, payload)
-        if not success:
-            return False, result
-
-        data = result.get("data")
-        if data is None:
-            return False, "获取用户信息失败：返回数据为空"
-        return True, data
-
-    def get_group_info(self, address: str, port: int, group_id: str) -> Tuple[bool, Union[dict, str]]:
-        """获取群信息"""
-        url = f"http://{address}:{port}/get_group_info"
-        payload = {"group_id": group_id, "no_cache": False}
-
-        success, result = self._make_request(url, payload)
-        if not success:
-            return False, result
-
-        data = result.get("data")
-        if data is None:
-            return False, "获取群信息失败：返回数据为空"
-        return True, data
+    command_pattern = _load_command_pattern('pick')  # 在类定义时动态加载配置
 
     async def execute(self) -> Tuple[bool, Optional[str], int]:
         # 获取用户信息
@@ -319,13 +343,13 @@ class PickBottleCommand(BaseCommand):
 
         # 获取当前用户昵称
         current_user_name = "未知"
-        success, current_stranger_info = self.get_stranger_info(napcat_address, napcat_port, user_id)
+        success, current_stranger_info = NapcatAPI.get_stranger_info(napcat_address, napcat_port, user_id)
         if success:
             current_user_name = current_stranger_info.get("nickname") or current_stranger_info.get("nick", "未知")
 
         # 获取当前群名称
         current_group_name = "未知"
-        success, current_group_info = self.get_group_info(napcat_address, napcat_port, group_id)
+        success, current_group_info = NapcatAPI.get_group_info(napcat_address, napcat_port, group_id)
         if success:
             current_group_name = current_group_info.get("group_name", "未知")
 
@@ -343,13 +367,13 @@ class PickBottleCommand(BaseCommand):
 
         # 获取发送者昵称
         sender_name = "未知"
-        success, stranger_info = self.get_stranger_info(napcat_address, napcat_port, bottle['sender'])
+        success, stranger_info = NapcatAPI.get_stranger_info(napcat_address, napcat_port, bottle['sender'])
         if success:
             sender_name = stranger_info.get("nickname") or stranger_info.get("nick", "未知")
 
         # 获取发送者群名称
         sender_group_name = "未知"
-        success, group_info = self.get_group_info(napcat_address, napcat_port, bottle['sender_group'])
+        success, group_info = NapcatAPI.get_group_info(napcat_address, napcat_port, bottle['sender_group'])
         if success:
             sender_group_name = group_info.get("group_name", "未知")
 
@@ -379,16 +403,29 @@ class DriftBottlePlugin(BasePlugin):
     config_file_name = "config.toml"
     config_section_descriptions = {
         "plugin": "插件基础配置",
-        "napcat": "napcat服务器配置"
+        "napcat": "napcat服务器配置",
+        "command": "命令配置"
     }
     config_schema = {
         "plugin": {
             "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
-            "config_version": ConfigField(type=str, default="1.0.0", description="配置版本")
+            "config_version": ConfigField(type=str, default="1.1.0", description="配置版本")
         },
         "napcat": {
             "address": ConfigField(type=str, default="napcat", description="napcat服务器连接地址"),
             "port": ConfigField(type=int, default=3000, description="napcat服务器端口")
+        },
+        "command": {
+            "throw_regex": ConfigField(
+                type=str,
+                default=r'^扔漂流瓶.+$',
+                description="扔漂流瓶命令的正则表达式，用于匹配触发命令的消息"
+            ),
+            "pick_regex": ConfigField(
+                type=str,
+                default=r'^捡漂流瓶$',
+                description="捡漂流瓶命令的正则表达式，用于匹配触发命令的消息"
+            )
         }
     }
 
