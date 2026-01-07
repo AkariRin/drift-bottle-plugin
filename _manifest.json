@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "name": "漂流瓶",
   "version": "1.0.0",
-  "description": "",
+  "description": "扔漂流瓶、捡漂流瓶，跨群传递消息的互动插件",
   "author": {
     "name": "梦清",
     "url": "https://github.com/AkariRin"
