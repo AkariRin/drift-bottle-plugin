@@ -258,7 +258,8 @@ class ThrowBottleCommand(BaseCommand):
         content = message_text[4:].strip()  # "扔漂流瓶"是4个字符
 
         if not content:
-            await self.send_text("漂流瓶内容不能为空哦~")
+            error_msg = self.get_config("messages.throw_empty_content", "漂流瓶内容不能为空哦~")
+            await self.send_text(error_msg)
             return False, "内容为空", 1
 
         # 获取用户信息
@@ -274,7 +275,8 @@ class ThrowBottleCommand(BaseCommand):
         stream_type = chat_api.get_stream_type(chat_stream)
 
         if stream_type != "group":
-            await self.send_text("漂流瓶只能在群聊中使用哦~")
+            error_msg = self.get_config("messages.error_not_group", "漂流瓶只能在群聊中使用哦~")
+            await self.send_text(error_msg)
             return False, "非群聊环境", 1
 
         group_id = str(chat_stream.group_info.group_id)
@@ -306,7 +308,9 @@ class ThrowBottleCommand(BaseCommand):
         logger.info(f"用户 {user_name}({user_id}) 在群 {group_name}({group_id}) 扔了一个漂流瓶(ID:{bottle_id}): {content[:20]}...")
 
         # 发送确认消息
-        response = f"你将一个写着【{content}】的纸条塞入瓶中扔进大海，希望有人捞到吧~"
+        response = self.get_config("messages.throw_success", "你将一个写着【{content}】的纸条塞入瓶中扔进大海，希望有人捞到吧~").format(
+            content=content
+        )
         await self.send_text(response)
 
         return True, "扔漂流瓶成功", 1
@@ -332,7 +336,8 @@ class PickBottleCommand(BaseCommand):
         stream_type = chat_api.get_stream_type(chat_stream)
 
         if stream_type != "group":
-            await self.send_text("漂流瓶只能在群聊中使用哦~")
+            error_msg = self.get_config("messages.error_not_group", "漂流瓶只能在群聊中使用哦~")
+            await self.send_text(error_msg)
             return False, "非群聊环境", 1
 
         group_id = str(chat_stream.group_info.group_id)
@@ -362,7 +367,8 @@ class PickBottleCommand(BaseCommand):
         bottle = db.get_random_bottle()
 
         if not bottle:
-            await self.send_text("大海里暂时没有漂流瓶，试试自己扔一个吧~")
+            error_msg = self.get_config("messages.pick_empty", "大海里暂时没有漂流瓶，试试自己扔一个吧~")
+            await self.send_text(error_msg)
             return True, "没有可用漂流瓶", 1
 
         # 获取发送者昵称
@@ -383,10 +389,14 @@ class PickBottleCommand(BaseCommand):
         logger.info(f"用户 {current_user_name}({user_id}) 在群 {current_group_name}({group_id}) 捡到了漂流瓶(ID:{bottle['id']})")
 
         # 构建返回消息
-        response = f"""你在海边捡到了一个漂流瓶，瓶中的纸条上写着：
-{bottle['content']}
-BY：{sender_name} ({bottle['sender']})
-From：{sender_group_name} ({bottle['sender_group']})"""
+        response = self.get_config("messages.pick_success",
+            "你在海边捡到了一个漂流瓶，瓶中的纸条上写着：\n{content}\nBY：{sender_name} ({sender_qq})\nFrom：{sender_group_name} ({sender_group})").format(
+            content=bottle['content'],
+            sender_name=sender_name,
+            sender_qq=bottle['sender'],
+            sender_group_name=sender_group_name,
+            sender_group=bottle['sender_group']
+        )
 
         await self.send_text(response)
 
@@ -404,12 +414,13 @@ class DriftBottlePlugin(BasePlugin):
     config_section_descriptions = {
         "plugin": "插件基础配置",
         "napcat": "napcat服务器配置",
-        "command": "命令配置"
+        "command": "命令配置",
+        "messages": "消息文本配置"
     }
     config_schema = {
         "plugin": {
             "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
-            "config_version": ConfigField(type=str, default="1.1.0", description="配置版本")
+            "config_version": ConfigField(type=str, default="1.1.1", description="配置版本")
         },
         "napcat": {
             "address": ConfigField(type=str, default="napcat", description="napcat服务器连接地址"),
@@ -425,6 +436,33 @@ class DriftBottlePlugin(BasePlugin):
                 type=str,
                 default=r'^捡漂流瓶$',
                 description="捡漂流瓶命令的正则表达式，用于匹配触发命令的消息"
+            )
+        },
+        "messages": {
+            "throw_success": ConfigField(
+                type=str,
+                default="你将一个写着【{content}】的纸条塞入瓶中扔进大海，希望有人捞到吧~",
+                description="扔漂流瓶成功的提示文本，支持占位符: {content} 漂流瓶内容"
+            ),
+            "pick_success": ConfigField(
+                type=str,
+                default="你在海边捡到了一个漂流瓶，瓶中的纸条上写着：\n{content}\nBY：{sender_name} ({sender_qq})\nFrom：{sender_group_name} ({sender_group})",
+                description="捡漂流瓶成功的提示文本，支持占位符: {content} 漂流瓶内容, {sender_name} 发送者昵称, {sender_qq} 发送者QQ号, {sender_group_name} 发送者群名称, {sender_group} 发送者群号"
+            ),
+            "throw_empty_content": ConfigField(
+                type=str,
+                default="漂流瓶内容不能为空哦~",
+                description="扔漂流瓶时内容为空的提示"
+            ),
+            "pick_empty": ConfigField(
+                type=str,
+                default="大海里暂时没有漂流瓶，试试自己扔一个吧~",
+                description="捡漂流瓶时没有可用漂流瓶的提示"
+            ),
+            "error_not_group": ConfigField(
+                type=str,
+                default="漂流瓶只能在群聊中使用哦~",
+                description="非群聊环境下使用漂流瓶命令的错误提示"
             )
         }
     }

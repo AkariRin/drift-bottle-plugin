@@ -40,7 +40,7 @@
 ```toml
 [plugin]
 enabled = true                 # 是否启用插件
-config_version = "1.1.0"       # 配置版本
+config_version = "1.2.0"       # 配置版本
 
 [napcat]
 address = "napcat"             # napcat服务器连接地址
@@ -52,6 +52,19 @@ throw_regex = '^扔漂流瓶.+$'
 
 # 捡漂流瓶命令的正则表达式，用于匹配触发命令的消息
 pick_regex = '^捡漂流瓶$'
+
+[messages]
+# 消息模板配置，支持占位符
+# 详见 MESSAGE_TEMPLATE_GUIDE.md 了解所有可用占位符
+throw_empty_content = "漂流瓶内容不能为空哦~"
+throw_success = "你将一个写着【{content}】的纸条塞入瓶中扔进大海，希望有人捞到吧~"
+pick_empty = "大海里暂时没有漂流瓶，试试自己扔一个吧~"
+pick_success = """你在海边捡到了一个漂流瓶，瓶中的纸条上写着：
+{content}
+BY：{sender_name} ({sender_qq})
+From：{sender_group_name} ({sender_group})"""
+error_user_info = "无法获取用户信息"
+error_not_group = "漂流瓶只能在群聊中使用哦~"
 ```
 
 ### 自定义触发词示例
@@ -111,6 +124,13 @@ Bot: 大海里暂时没有漂流瓶，试试自己扔一个吧~
 插件数据存储在 `bottles.db` SQLite 数据库中
 
 ## 技术说明
+
+### v1.2.0 消息模板化更新
+
+- ✅ **消息模板化**：所有返回消息已模板化到配置文件，支持自定义所有消息文本
+- ✅ **占位符支持**：消息模板支持占位符（如 `{content}`、`{sender_name}` 等），灵活配置消息格式
+- ✅ **参考 jrlp-plugin**：遵循 jrlp-plugin 的消息模板设计模式，保持插件间一致性
+- 📖 **详细文档**：新增 `MESSAGE_TEMPLATE_GUIDE.md` 详细说明所有可用占位符
 
 ### v1.1.0 重构更新
 
