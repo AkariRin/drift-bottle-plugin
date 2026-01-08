@@ -40,7 +40,7 @@
 ```toml
 [plugin]
 enabled = true                 # 是否启用插件
-config_version = "1.2.0"       # 配置版本
+config_version = "1.1.2"       # 配置版本
 
 [napcat]
 address = "napcat"             # napcat服务器连接地址
@@ -55,15 +55,16 @@ pick_regex = '^捡漂流瓶$'
 
 [messages]
 # 消息模板配置，支持占位符
-# 详见 MESSAGE_TEMPLATE_GUIDE.md 了解所有可用占位符
-throw_empty_content = "漂流瓶内容不能为空哦~"
 throw_success = "你将一个写着【{content}】的纸条塞入瓶中扔进大海，希望有人捞到吧~"
-pick_empty = "大海里暂时没有漂流瓶，试试自己扔一个吧~"
 pick_success = """你在海边捡到了一个漂流瓶，瓶中的纸条上写着：
 {content}
 BY：{sender_name} ({sender_qq})
 From：{sender_group_name} ({sender_group})"""
-error_user_info = "无法获取用户信息"
+throw_empty_content = "漂流瓶内容不能为空哦~"
+throw_no_image = "漂流瓶不支持图片哦，请只发送纯文本内容~"
+throw_no_emoji = "漂流瓶不支持表情包哦，请只发送纯文本内容~"
+throw_no_voice = "漂流瓶不支持语音哦，请只发送纯文本内容~"
+pick_empty = "大海里暂时没有漂流瓶，试试自己扔一个吧~"
 error_not_group = "漂流瓶只能在群聊中使用哦~"
 ```
 
@@ -112,46 +113,26 @@ From：群名 (1919810)
 Bot: 大海里暂时没有漂流瓶，试试自己扔一个吧~
 ```
 
+### 多媒体内容被拒绝
+```
+用户: 扔漂流瓶[图片]
+Bot: 漂流瓶不支持图片哦，请只发送纯文本内容~
+
+用户: 扔漂流瓶[表情包]
+Bot: 漂流瓶不支持表情包哦，请只发送纯文本内容~
+
+用户: 扔漂流瓶[语音]
+Bot: 漂流瓶不支持语音哦，请只发送纯文本内容~
+```
+
 ## 注意事项
 
 - ⚠️ 该功能仅支持**群聊**环境，私聊无法使用
 - 🌐 漂流瓶跨群共享，所有群都能捡到其他群扔的瓶子
 - 📦 每个漂流瓶只能被捡一次，捡起后就从海中消失
 - 💬 扔漂流瓶时内容不能为空
+- 🚫 **仅支持纯文本内容**：漂流瓶不接受图片、表情包、语音等多媒体内容，仅接受纯文本消息
 
 ## 数据存储
 
 插件数据存储在 `bottles.db` SQLite 数据库中
-
-## 技术说明
-
-### v1.2.0 消息模板化更新
-
-- ✅ **消息模板化**：所有返回消息已模板化到配置文件，支持自定义所有消息文本
-- ✅ **占位符支持**：消息模板支持占位符（如 `{content}`、`{sender_name}` 等），灵活配置消息格式
-- ✅ **参考 jrlp-plugin**：遵循 jrlp-plugin 的消息模板设计模式，保持插件间一致性
-- 📖 **详细文档**：新增 `MESSAGE_TEMPLATE_GUIDE.md` 详细说明所有可用占位符
-
-### v1.1.0 重构更新
-
-- ✅ **NapcatAPI 类抽离**：将 Napcat API 请求方法抽离到独立的 `NapcatAPI` 类，消除代码重复，提升可维护性
-- ✅ **支持自定义正则表达式**：命令触发词可通过配置文件自定义，提供更大的灵活性
-- ✅ **统一代码风格**：参考 `jrlp-plugin` 的代码结构，保持插件间的一致性
-
-### 代码架构
-
-```
-plugin.py
-├── NapcatAPI           # Napcat API 调用类（静态方法）
-│   ├── _make_request()      # HTTP 请求基础方法
-│   ├── get_stranger_info()  # 获取用户信息
-│   └── get_group_info()     # 获取群信息
-├── BottleDatabase      # 数据库管理类
-│   ├── save_bottle()        # 保存漂流瓶
-│   ├── get_random_bottle()  # 随机获取漂流瓶
-│   └── pick_bottle()        # 标记漂流瓶已被捡起
-├── ThrowBottleCommand  # 扔漂流瓶命令
-└── PickBottleCommand   # 捡漂流瓶命令
-```
-
-

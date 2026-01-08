@@ -251,6 +251,22 @@ class ThrowBottleCommand(BaseCommand):
     command_pattern = _load_command_pattern('throw')  # 在类定义时动态加载配置
 
     async def execute(self) -> Tuple[bool, Optional[str], int]:
+        # 检查消息是否包含多媒体内容（图片、表情包、语音等）
+        if hasattr(self.message, 'has_picid') and self.message.has_picid:
+            error_msg = self.get_config("messages.throw_no_image", "漂流瓶不支持图片哦，请只发送纯文本内容~")
+            await self.send_text(error_msg)
+            return False, "包含图片", 1
+
+        if hasattr(self.message, 'has_emoji') and self.message.has_emoji:
+            error_msg = self.get_config("messages.throw_no_emoji", "漂流瓶不支持表情包哦，请只发送纯文本内容~")
+            await self.send_text(error_msg)
+            return False, "包含表情包", 1
+
+        if hasattr(self.message, 'is_voice') and self.message.is_voice:
+            error_msg = self.get_config("messages.throw_no_voice", "漂流瓶不支持语音哦，请只发送纯文本内容~")
+            await self.send_text(error_msg)
+            return False, "包含语音", 1
+
         # 获取消息内容
         message_text = self.message.processed_plain_text.strip()
 
@@ -430,7 +446,7 @@ class DriftBottlePlugin(BasePlugin):
     config_schema = {
         "plugin": {
             "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
-            "config_version": ConfigField(type=str, default="1.1.1", description="配置版本")
+            "config_version": ConfigField(type=str, default="1.1.2", description="配置版本")
         },
         "napcat": {
             "address": ConfigField(type=str, default="napcat", description="napcat服务器连接地址"),
@@ -463,6 +479,21 @@ class DriftBottlePlugin(BasePlugin):
                 type=str,
                 default="漂流瓶内容不能为空哦~",
                 description="扔漂流瓶时内容为空的提示"
+            ),
+            "throw_no_image": ConfigField(
+                type=str,
+                default="漂流瓶不支持图片哦，请只发送纯文本内容~",
+                description="扔漂流瓶时包含图片的错误提示"
+            ),
+            "throw_no_emoji": ConfigField(
+                type=str,
+                default="漂流瓶不支持表情包哦，请只发送纯文本内容~",
+                description="扔漂流瓶时包含表情包的错误提示"
+            ),
+            "throw_no_voice": ConfigField(
+                type=str,
+                default="漂流瓶不支持语音哦，请只发送纯文本内容~",
+                description="扔漂流瓶时包含语音的错误提示"
             ),
             "pick_empty": ConfigField(
                 type=str,
