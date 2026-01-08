@@ -308,9 +308,13 @@ class ThrowBottleCommand(BaseCommand):
         logger.info(f"用户 {user_name}({user_id}) 在群 {group_name}({group_id}) 扔了一个漂流瓶(ID:{bottle_id}): {content[:20]}...")
 
         # 发送确认消息
-        response = self.get_config("messages.throw_success", "你将一个写着【{content}】的纸条塞入瓶中扔进大海，希望有人捞到吧~").format(
-            content=content
-        )
+        templates = self.get_config("messages.throw_success", ["你将一个写着【{content}】的纸条塞入瓶中扔进大海，希望有人捞到吧~"])
+        # 如果配置是字符串，转换为列表
+        if isinstance(templates, str):
+            templates = [templates]
+        # 随机选择一个模板
+        template = random.choice(templates)
+        response = template.format(content=content)
         await self.send_text(response)
 
         return True, "扔漂流瓶成功", 1
@@ -389,8 +393,14 @@ class PickBottleCommand(BaseCommand):
         logger.info(f"用户 {current_user_name}({user_id}) 在群 {current_group_name}({group_id}) 捡到了漂流瓶(ID:{bottle['id']})")
 
         # 构建返回消息
-        response = self.get_config("messages.pick_success",
-            "你在海边捡到了一个漂流瓶，瓶中的纸条上写着：\n{content}\nBY：{sender_name} ({sender_qq})\nFrom：{sender_group_name} ({sender_group})").format(
+        templates = self.get_config("messages.pick_success",
+            ["你在海边捡到了一个漂流瓶，瓶中的纸条上写着：\n{content}\nBY：{sender_name} ({sender_qq})\nFrom：{sender_group_name} ({sender_group})"])
+        # 如果配置是字符串，转换为列表
+        if isinstance(templates, str):
+            templates = [templates]
+        # 随机选择一个模板
+        template = random.choice(templates)
+        response = template.format(
             content=bottle['content'],
             sender_name=sender_name,
             sender_qq=bottle['sender'],
@@ -440,14 +450,14 @@ class DriftBottlePlugin(BasePlugin):
         },
         "messages": {
             "throw_success": ConfigField(
-                type=str,
-                default="你将一个写着【{content}】的纸条塞入瓶中扔进大海，希望有人捞到吧~",
-                description="扔漂流瓶成功的提示文本，支持占位符: {content} 漂流瓶内容"
+                type=list,
+                default=["你将一个写着【{content}】的纸条塞入瓶中扔进大海，希望有人捞到吧~"],
+                description="扔漂流瓶成功的提示文本列表（随机选择一个），支持占位符: {content} 漂流瓶内容"
             ),
             "pick_success": ConfigField(
-                type=str,
-                default="你在海边捡到了一个漂流瓶，瓶中的纸条上写着：\n{content}\nBY：{sender_name} ({sender_qq})\nFrom：{sender_group_name} ({sender_group})",
-                description="捡漂流瓶成功的提示文本，支持占位符: {content} 漂流瓶内容, {sender_name} 发送者昵称, {sender_qq} 发送者QQ号, {sender_group_name} 发送者群名称, {sender_group} 发送者群号"
+                type=list,
+                default=["你在海边捡到了一个漂流瓶，瓶中的纸条上写着：\n{content}\nBY：{sender_name} ({sender_qq})\nFrom：{sender_group_name} ({sender_group})"],
+                description="捡漂流瓶成功的提示文本列表（随机选择一个），支持占位符: {content} 漂流瓶内容, {sender_name} 发送者昵称, {sender_qq} 发送者QQ号, {sender_group_name} 发送者群名称, {sender_group} 发送者群号"
             ),
             "throw_empty_content": ConfigField(
                 type=str,
